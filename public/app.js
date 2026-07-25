@@ -135,6 +135,24 @@ const LIST_STATUS_BADGE = { active: ['Activa', 'blue'], completed: ['✓ Complet
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
 
+// ── Tema claro/oscuro ───────────────────────────────────────────────────────
+function currentTheme() {
+  return localStorage.getItem('cor_theme')
+    || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+}
+function applyTheme(t) {
+  document.documentElement.setAttribute('data-theme', t);
+  localStorage.setItem('cor_theme', t);
+  document.querySelectorAll('.theme-toggle').forEach(b => {
+    b.textContent = t === 'dark' ? '☀️' : '🌙';
+    b.title = t === 'dark' ? 'Modo claro' : 'Modo oscuro';
+  });
+}
+function toggleTheme() { applyTheme(currentTheme() === 'dark' ? 'light' : 'dark'); }
+// Un solo listener (delegación) para cualquier botón .theme-toggle de la app.
+document.addEventListener('click', e => { if (e.target.closest('.theme-toggle')) toggleTheme(); });
+const themeBtn = '<button class="icon-btn theme-toggle" title="Modo oscuro">🌙</button>';
+
 // ── Router ────────────────────────────────────────────────────────────────
 const ROUTES = [
   { path: 'dashboard',    label: 'Inicio',         emoji: '🏠', render: renderDashboard },
@@ -152,9 +170,10 @@ function currentRoute() { return (location.hash.replace('#/', '') || 'dashboard'
 async function navigate() {
   if (!currentUser) {
     const r = currentRoute();
-    if (r === 'register') { renderRegister(); return; }
-    if (r === 'forgot')   { renderForgot();   return; }
-    renderLogin();
+    if (r === 'register') renderRegister();
+    else if (r === 'forgot') renderForgot();
+    else renderLogin();
+    applyTheme(currentTheme());   // sincroniza el ícono del toggle
     return;
   }
   renderShell();
@@ -178,12 +197,15 @@ function renderShell() {
   app.innerHTML = `
     <div id="banner-slot"></div>
     <div id="topbar">
+      <button id="hamburger" class="icon-btn" aria-label="Menú">☰</button>
       <div class="logo">C</div>
       <div class="brand">Corrientes</div>
       <div class="spacer"></div>
+      ${themeBtn}
       <span class="user-chip">${esc(currentUser.fullName)} ${currentUser.role === 'admin' ? '· <b>admin</b>' : ''}</span>
       <button class="btn ghost small" id="logoutBtn">Salir</button>
     </div>
+    <div id="nav-overlay"></div>
     <div id="layout">
       <nav id="sidenav">
         ${ROUTES.map(r => `
@@ -197,6 +219,14 @@ function renderShell() {
     </div>
   `;
   document.getElementById('logoutBtn').onclick = logout;
+  // Drawer móvil
+  const sidenav = document.getElementById('sidenav');
+  const overlay = document.getElementById('nav-overlay');
+  const closeNav = () => { sidenav.classList.remove('open'); overlay.classList.remove('show'); };
+  document.getElementById('hamburger').onclick = () => { sidenav.classList.toggle('open'); overlay.classList.toggle('show'); };
+  overlay.onclick = closeNav;
+  sidenav.querySelectorAll('a').forEach(a => a.addEventListener('click', closeNav));
+  applyTheme(currentTheme()); // sincroniza el ícono del toggle
   renderBannerSlot();
 }
 
@@ -214,7 +244,7 @@ function renderLogin() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div id="banner-slot"></div>
-    <div id="login-screen">
+    <div id="login-screen"><button class="icon-btn theme-toggle auth-theme">🌙</button>
       <div class="box card">
         <div class="logo-big">C</div>
         <h1 class="page-title" style="text-align:center">Corrientes</h1>
@@ -251,7 +281,7 @@ function renderRegister() {
   const ref = referralFromUrl();
   app.innerHTML = `
     <div id="banner-slot"></div>
-    <div id="login-screen">
+    <div id="login-screen"><button class="icon-btn theme-toggle auth-theme">🌙</button>
       <div class="box card" style="width:420px;">
         <div class="logo-big">C</div>
         <h1 class="page-title" style="text-align:center">Crear cuenta</h1>
@@ -299,7 +329,7 @@ async function doRegister() {
     // El código de recuperación viene UNA sola vez — hay que mostrarlo sí o sí.
     const app = document.getElementById('app');
     app.innerHTML = `
-      <div id="login-screen"><div class="box card" style="width:420px;">
+      <div id="login-screen"><button class="icon-btn theme-toggle auth-theme">🌙</button><div class="box card" style="width:420px;">
         <div class="logo-big">C</div>
         <h1 class="page-title" style="text-align:center">¡Cuenta creada! 🎉</h1>
         ${data.recoveryCode ? `
@@ -320,7 +350,7 @@ function renderForgot() {
   const app = document.getElementById('app');
   app.innerHTML = `
     <div id="banner-slot"></div>
-    <div id="login-screen">
+    <div id="login-screen"><button class="icon-btn theme-toggle auth-theme">🌙</button>
       <div class="box card" style="width:420px;">
         <div class="logo-big">C</div>
         <h1 class="page-title" style="text-align:center">Recuperar contraseña</h1>
@@ -353,7 +383,7 @@ async function doReset() {
     await apiJson('/auth/reset-password', { method: 'POST', body: JSON.stringify(payload) });
     const app = document.getElementById('app');
     app.innerHTML = `
-      <div id="login-screen"><div class="box card">
+      <div id="login-screen"><button class="icon-btn theme-toggle auth-theme">🌙</button><div class="box card">
         <div class="logo-big">C</div>
         <div class="alert success" style="margin-top:10px;">Contraseña actualizada. Ya podés iniciar sesión con la nueva.</div>
         <button class="btn" id="goLogin" style="width:100%">Ir a iniciar sesión</button>
@@ -1138,6 +1168,7 @@ async function renderMore(content) {
 
 // ── Init ──────────────────────────────────────────────────────────────────
 async function init() {
+  applyTheme(currentTheme());   // fija el tema al arrancar (además del script inline anti-flash)
   const token = tokenStore.getAccess();
   if (token) {
     try { currentUser = await apiJson('/auth/me'); } catch { tokenStore.clear(); }

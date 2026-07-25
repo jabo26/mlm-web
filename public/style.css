@@ -25,6 +25,29 @@
   --shadow: 0 2px 10px rgba(15,25,35,0.06);
 }
 
+/* ── Modo oscuro — remapea los mismos tokens (superficies/fondo/texto) para no
+   tocar cada componente; los acentos se aclaran un poco para contraste. ──── */
+:root[data-theme="dark"] {
+  --primary: #12D9A3;
+  --primary-dark: #0FB88A;
+  --primary-light: #0E2A22;
+  --accent: #8E86FF;
+  --accent-light: #1E1B33;
+  --dark: #E7ECF2;         /* texto principal */
+  --gray400: #C2CCD6;
+  --gray300: #93A1B3;
+  --gray200: #64727F;
+  --gray100: #2A3340;      /* bordes */
+  --gray50:  #0F141B;      /* fondo de página */
+  --white:   #171E29;      /* superficies: cards, topbar, sidenav, inputs */
+  --success: #34D399; --success-light: #10281F;
+  --warning: #FBBF24; --warning-light: #2A2313;
+  --error:   #F87171; --error-light:   #2E1A1A;
+  --info:    #60A5FA; --info-light:    #14203A;
+  --shadow: 0 2px 12px rgba(0,0,0,0.45);
+  color-scheme: dark;
+}
+
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -112,12 +135,13 @@ p.page-sub { color: var(--gray300); margin: 0 0 18px; font-size: 14px; }
 .badge.purple { background: var(--accent-light); color: var(--accent); }
 .badge.blue   { background: var(--info-light); color: var(--info); }
 
-input, select {
+input, select, textarea {
   width: 100%; padding: 10px 12px; border-radius: 10px;
   border: 1.5px solid var(--gray100); font-size: 14px; margin-bottom: 12px;
-  font-family: inherit;
+  font-family: inherit; background: var(--white); color: var(--dark);
 }
-input:focus, select:focus { outline: none; border-color: var(--primary); }
+input::placeholder, textarea::placeholder { color: var(--gray200); }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); }
 label.field-label {
   display: block; font-size: 11px; font-weight: 700; color: var(--gray300);
   text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 5px;
@@ -244,4 +268,54 @@ td { padding: 8px; border-top: 1px solid var(--gray100); }
   min-width: 20px; height: 20px; border-radius: 10px; padding: 0 6px;
   background: var(--primary); color: white; font-size: 11px; font-weight: 800;
   display: flex; align-items: center; justify-content: center;
+}
+
+/* ── Botones de ícono (tema, hamburguesa) ───────────────────────────────── */
+.icon-btn {
+  background: transparent; border: none; cursor: pointer; color: var(--gray400);
+  font-size: 18px; line-height: 1; padding: 6px 9px; border-radius: 10px;
+}
+.icon-btn:hover { background: var(--gray50); }
+#hamburger { display: none; }                 /* solo visible en móvil (ver media) */
+.auth-theme { position: fixed; top: 16px; right: 16px; z-index: 5; font-size: 22px; }
+
+/* Overlay del drawer (solo móvil) */
+#nav-overlay {
+  display: none; position: fixed; inset: 0; z-index: 20;
+  background: rgba(15,25,35,0.5);
+}
+
+/* ── Modo oscuro: retoques puntuales de colores hardcodeados ─────────────── */
+:root[data-theme="dark"] .pos-num.leader { background: #3A2E0A; color: #FBBF24; }
+:root[data-theme="dark"] .chat-overlay { background: rgba(0,0,0,0.6); }
+
+/* ── RESPONSIVE ──────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  #hamburger { display: inline-flex; }
+  #topbar { padding: 12px 14px; gap: 8px; }
+  #topbar .brand { font-size: 16px; }
+  #topbar .user-chip { display: none; }        /* ahorra espacio en móvil */
+
+  /* Sidenav como cajón deslizable (off-canvas) */
+  #sidenav {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 30; width: 250px;
+    transform: translateX(-100%); transition: transform .25s ease;
+    box-shadow: 2px 0 18px rgba(0,0,0,0.25); padding-top: 16px;
+  }
+  #sidenav.open { transform: translateX(0); }
+  #nav-overlay.show { display: block; }
+
+  #content { padding: 16px 14px; max-width: 100%; }
+  .stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  #login-screen .box { width: 100% !important; max-width: 400px; }
+  .link-row { flex-direction: column; align-items: stretch; }
+  .chat-overlay { padding: 0; }
+  .chat-modal { width: 100%; height: 100%; max-height: 100%; border-radius: 0; }
+  table { font-size: 12px; }
+  .card { overflow-x: auto; }                  /* tablas anchas scrollean dentro de la card */
+}
+
+/* En pantallas grandes nunca mostrar hamburguesa/overlay */
+@media (min-width: 769px) {
+  #hamburger, #nav-overlay { display: none !important; }
 }
