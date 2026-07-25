@@ -1,0 +1,58 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// SERVIDOR ESTÁTICO LOCAL — Corrientes Web (uso interno del VPS)
+//
+// Sirve la SPA en public/ atado ÚNICAMENTE a 127.0.0.1 — el sistema operativo
+// rechaza cualquier conexión que no venga de la propia máquina, sin importar
+// firewall ni reglas de red. No usar 0.0.0.0 acá bajo ningún concepto: eso
+// expondría esto a internet a través del mismo VPS.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+
+// 4200 no es arbitrario: coincide con FRONTEND_URL del backend (.env), que es
+// el único origen que su configuración CORS acepta. Si cambiás el puerto acá,
+// el navegador va a bloquear las llamadas fetch() por política CORS.
+const PORT = 4200;
+const HOST = '127.0.0.1'; // loopback únicamente — NO cambiar a 0.0.0.0
+const ROOT = path.join(__dirname, 'public');
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js':   'application/javascript; charset=utf-8',
+  '.css':  'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg':  'image/svg+xml',
+};
+
+const server = http.createServer((req, res) => {
+  let reqPath = decodeURIComponent(req.url.split('?')[0]);
+  if (reqPath === '/') reqPath = '/index.html';
+
+  const filePath = path.join(ROOT, reqPath);
+  // Evitar path traversal fuera de /public
+  if (!filePath.startsWith(ROOT)) {
+    res.writeHead(403); res.end('Forbidden'); return;
+  }
+
+  fs.readFile(filePath, (err, data) => {
+    if (err) {
+      // SPA fallback: cualquier ruta no encontrada sirve index.html
+      // (el ruteo real lo hace el hash-router en el cliente)
+      fs.readFile(path.join(ROOT, 'index.html'), (err2, indexData) => {
+        if (err2) { res.writeHead(404); res.end('Not found'); return; }
+        res.writeHead(200, { 'Content-Type': MIME['.html'] });
+        res.end(indexData);
+      });
+      return;
+    }
+    const ext = path.extname(filePath);
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+    res.end(data);
+  });
+});
+
+server.listen(PORT, HOST, () => {
+  console.log(`Corrientes Web (interno) corriendo en http://${HOST}:${PORT} — solo accesible desde esta máquina`);
+});
