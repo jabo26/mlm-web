@@ -4,14 +4,17 @@
 // Consume la MISMA API que la app — sin cambios de backend.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const API_BASE = 'http://localhost:4082/api';
-const MANUAL_URL = 'http://localhost:4082/downloads/manual-corrientes.html';
-const TERMS_URL  = 'http://localhost:4082/downloads/terminos-condiciones.html';
-const RULES_URL  = 'http://localhost:4082/downloads/reglas-reordenamiento.html';
+// URLs RELATIVAS al mismo origen: la SPA la sirve el propio backend (público,
+// detrás de Cloudflare, en app.jvlgsystem.com; y en loopback para uso interno).
+// Así no hay CORS ni dependencia de un host fijo — funciona desde cualquier origen.
+const API_BASE = '/api';
+const MANUAL_URL = '/downloads/manual-corrientes.html';
+const TERMS_URL  = '/downloads/terminos-condiciones.html';
+const RULES_URL  = '/downloads/reglas-reordenamiento.html';
 
 // Contenido de curso por nivel — prueba: solo nivel 1 tiene material real por ahora.
 const COURSE_CONTENT_URL = {
-  1: 'http://localhost:4082/downloads/curso-nivel-1.html',
+  1: '/downloads/curso-nivel-1.html',
 };
 
 // ── Almacenamiento de tokens (localStorage — esto es un panel de escritorio,
@@ -147,7 +150,13 @@ const ROUTES = [
 function currentRoute() { return (location.hash.replace('#/', '') || 'dashboard').split('?')[0]; }
 
 async function navigate() {
-  if (!currentUser) { renderLogin(); return; }
+  if (!currentUser) {
+    const r = currentRoute();
+    if (r === 'register') { renderRegister(); return; }
+    if (r === 'forgot')   { renderForgot();   return; }
+    renderLogin();
+    return;
+  }
   renderShell();
   const route = ROUTES.find(r => r.path === currentRoute()) || ROUTES[0];
   document.querySelectorAll('#sidenav a').forEach(a => a.classList.toggle('active', a.dataset.path === route.path));
@@ -171,7 +180,6 @@ function renderShell() {
     <div id="topbar">
       <div class="logo">C</div>
       <div class="brand">Corrientes</div>
-      <span class="badge-local">uso interno · localhost</span>
       <div class="spacer"></div>
       <span class="user-chip">${esc(currentUser.fullName)} ${currentUser.role === 'admin' ? '· <b>admin</b>' : ''}</span>
       <button class="btn ghost small" id="logoutBtn">Salir</button>
@@ -210,19 +218,150 @@ function renderLogin() {
       <div class="box card">
         <div class="logo-big">C</div>
         <h1 class="page-title" style="text-align:center">Corrientes</h1>
-        <p class="page-sub" style="text-align:center">Panel web interno — solo accesible desde este VPS</p>
+        <p class="page-sub" style="text-align:center">Ingresá para gestionar tu cuenta</p>
         <div id="loginError"></div>
         <label class="field-label">Email</label>
         <input id="loginEmail" type="email" placeholder="tu@email.com" />
         <label class="field-label">Contraseña</label>
         <input id="loginPassword" type="password" placeholder="••••••••" />
         <button class="btn" id="loginBtn" style="width:100%">Ingresar</button>
+        <div style="display:flex; justify-content:space-between; margin-top:14px; font-size:13px;">
+          <a href="#/register">Crear cuenta</a>
+          <a href="#/forgot">¿Olvidaste tu contraseña?</a>
+        </div>
       </div>
     </div>
   `;
   document.getElementById('loginBtn').onclick = doLogin;
   document.getElementById('loginPassword').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
   renderBannerSlot();
+}
+
+// Lee el código de referido del link (soporta #/register?ref=CODE y ?ref=CODE).
+function referralFromUrl() {
+  const fromHash = (location.hash.split('?')[1]) || '';
+  const fromSearch = location.search.startsWith('?') ? location.search.slice(1) : '';
+  const ref = new URLSearchParams(fromHash).get('ref') || new URLSearchParams(fromSearch).get('ref');
+  return ref ? ref.trim() : '';
+}
+
+// ── Registro ────────────────────────────────────────────────────────────────
+function renderRegister() {
+  const app = document.getElementById('app');
+  const ref = referralFromUrl();
+  app.innerHTML = `
+    <div id="banner-slot"></div>
+    <div id="login-screen">
+      <div class="box card" style="width:420px;">
+        <div class="logo-big">C</div>
+        <h1 class="page-title" style="text-align:center">Crear cuenta</h1>
+        <p class="page-sub" style="text-align:center">Necesitás el código de referido de quien te invitó</p>
+        <div id="regError"></div>
+        <label class="field-label">Código de referido</label>
+        <input id="rgRef" placeholder="Ej: ABC12345" value="${esc(ref)}" />
+        <label class="field-label">Nombre completo</label>
+        <input id="rgName" placeholder="Tu nombre y apellido" />
+        <label class="field-label">Email</label>
+        <input id="rgEmail" type="email" placeholder="tu@email.com" />
+        <label class="field-label">Cuenta Airtm (usuario recomendado)</label>
+        <input id="rgAirtm" placeholder="tu_usuario_airtm" />
+        <label class="field-label">Contraseña (mín. 8, con mayúscula, minúscula y número)</label>
+        <input id="rgPass" type="password" placeholder="••••••••" />
+        <label style="display:flex; gap:8px; align-items:flex-start; font-size:13px; color:var(--gray400); margin:4px 0 14px;">
+          <input id="rgTerms" type="checkbox" style="width:auto; margin:2px 0 0;" />
+          <span>Acepto los <a href="${TERMS_URL}" target="_blank" rel="noopener">términos y condiciones</a>, incluida la exposición de riesgos del sistema multinivel.</span>
+        </label>
+        <button class="btn" id="rgBtn" style="width:100%">Crear cuenta</button>
+        <div style="text-align:center; margin-top:14px; font-size:13px;"><a href="#/">← Volver al inicio de sesión</a></div>
+      </div>
+    </div>
+  `;
+  document.getElementById('rgBtn').onclick = doRegister;
+  renderBannerSlot();
+}
+
+async function doRegister() {
+  const errBox = document.getElementById('regError');
+  errBox.innerHTML = '';
+  const payload = {
+    referralCode: document.getElementById('rgRef').value.trim(),
+    fullName:     document.getElementById('rgName').value.trim(),
+    email:        document.getElementById('rgEmail').value.trim(),
+    airtmAccount: document.getElementById('rgAirtm').value.trim(),
+    password:     document.getElementById('rgPass').value,
+    acceptedTerms: document.getElementById('rgTerms').checked,
+  };
+  if (!payload.acceptedTerms) { errBox.innerHTML = `<div class="alert error">Debés aceptar los términos y condiciones.</div>`; return; }
+  try {
+    const data = await apiJson('/auth/register', { method: 'POST', body: JSON.stringify(payload) });
+    tokenStore.set(data.accessToken, data.refreshToken);
+    currentUser = data.user;
+    // El código de recuperación viene UNA sola vez — hay que mostrarlo sí o sí.
+    const app = document.getElementById('app');
+    app.innerHTML = `
+      <div id="login-screen"><div class="box card" style="width:420px;">
+        <div class="logo-big">C</div>
+        <h1 class="page-title" style="text-align:center">¡Cuenta creada! 🎉</h1>
+        ${data.recoveryCode ? `
+          <div class="alert warn" style="margin-top:10px;">
+            <b>Guardá este código de recuperación</b> — es la única forma de recuperar tu contraseña y <b>no se vuelve a mostrar</b>:
+            <div style="font-size:20px; font-weight:800; letter-spacing:1px; text-align:center; margin:10px 0;">${esc(data.recoveryCode)}</div>
+          </div>` : ''}
+        <button class="btn" id="goDash" style="width:100%">Entendido, continuar</button>
+      </div></div>`;
+    document.getElementById('goDash').onclick = () => { location.hash = '#/dashboard'; navigate(); };
+  } catch (err) {
+    errBox.innerHTML = `<div class="alert error">${esc(err.message || 'No se pudo crear la cuenta')}</div>`;
+  }
+}
+
+// ── Recuperar contraseña (con código de recuperación) ────────────────────────
+function renderForgot() {
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div id="banner-slot"></div>
+    <div id="login-screen">
+      <div class="box card" style="width:420px;">
+        <div class="logo-big">C</div>
+        <h1 class="page-title" style="text-align:center">Recuperar contraseña</h1>
+        <p class="page-sub" style="text-align:center">Usá el código de recuperación que guardaste al registrarte</p>
+        <div id="fgError"></div>
+        <label class="field-label">Email</label>
+        <input id="fgEmail" type="email" placeholder="tu@email.com" />
+        <label class="field-label">Código de recuperación</label>
+        <input id="fgCode" placeholder="AB3D-9F2K-LM7Q" />
+        <label class="field-label">Nueva contraseña (mín. 8, con mayúscula, minúscula y número)</label>
+        <input id="fgPass" type="password" placeholder="••••••••" />
+        <button class="btn" id="fgBtn" style="width:100%">Cambiar contraseña</button>
+        <div style="text-align:center; margin-top:14px; font-size:13px;"><a href="#/">← Volver al inicio de sesión</a></div>
+      </div>
+    </div>
+  `;
+  document.getElementById('fgBtn').onclick = doReset;
+  renderBannerSlot();
+}
+
+async function doReset() {
+  const errBox = document.getElementById('fgError');
+  errBox.innerHTML = '';
+  const payload = {
+    email:        document.getElementById('fgEmail').value.trim(),
+    recoveryCode: document.getElementById('fgCode').value.trim(),
+    newPassword:  document.getElementById('fgPass').value,
+  };
+  try {
+    await apiJson('/auth/reset-password', { method: 'POST', body: JSON.stringify(payload) });
+    const app = document.getElementById('app');
+    app.innerHTML = `
+      <div id="login-screen"><div class="box card">
+        <div class="logo-big">C</div>
+        <div class="alert success" style="margin-top:10px;">Contraseña actualizada. Ya podés iniciar sesión con la nueva.</div>
+        <button class="btn" id="goLogin" style="width:100%">Ir a iniciar sesión</button>
+      </div></div>`;
+    document.getElementById('goLogin').onclick = () => { location.hash = '#/'; navigate(); };
+  } catch (err) {
+    errBox.innerHTML = `<div class="alert error">${esc(err.message || 'No se pudo cambiar la contraseña')}</div>`;
+  }
 }
 
 async function doLogin() {
