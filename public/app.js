@@ -153,6 +153,32 @@ function toggleTheme() { applyTheme(currentTheme() === 'dark' ? 'light' : 'dark'
 document.addEventListener('click', e => { if (e.target.closest('.theme-toggle')) toggleTheme(); });
 const themeBtn = '<button class="icon-btn theme-toggle" title="Modo oscuro">🌙</button>';
 
+// ── Auto-logout por inactividad ──────────────────────────────────────────────
+// Cierra la sesión tras N minutos sin actividad del usuario. Las consultas de
+// fondo (chat, notificaciones, banner) NO cuentan como actividad — solo eventos
+// reales del usuario — así una pestaña abierta y olvidada se cierra sola.
+const IDLE_LOGOUT_MIN = 30;                 // minutos — ajustable
+let idleTimer = null, lastActivity = 0, idleMsg = false;
+function armIdle() {
+  clearTimeout(idleTimer);
+  if (!currentUser) return;
+  idleTimer = setTimeout(idleLogout, IDLE_LOGOUT_MIN * 60 * 1000);
+}
+function onActivity() {
+  if (!currentUser) return;
+  const now = Date.now();
+  if (now - lastActivity < 3000) return;    // throttle: no re-armar en cada mousemove
+  lastActivity = now;
+  armIdle();
+}
+async function idleLogout() {
+  if (!currentUser) return;
+  idleMsg = true;                           // el login mostrará el aviso
+  await logout();
+}
+['click', 'keydown', 'mousemove', 'scroll', 'touchstart'].forEach(ev =>
+  document.addEventListener(ev, onActivity, { passive: true }));
+
 // ── Router ────────────────────────────────────────────────────────────────
 const ROUTES = [
   { path: 'dashboard',    label: 'Inicio',         emoji: '🏠', render: renderDashboard },
@@ -249,7 +275,7 @@ function renderLogin() {
         <div class="logo-big">C</div>
         <h1 class="page-title" style="text-align:center">Corrientes</h1>
         <p class="page-sub" style="text-align:center">Ingresá para gestionar tu cuenta</p>
-        <div id="loginError"></div>
+        <div id="loginError">${idleMsg ? '<div class="alert warn">Tu sesión se cerró por inactividad. Volvé a ingresar.</div>' : ''}</div>
         <label class="field-label">Email</label>
         <input id="loginEmail" type="email" placeholder="tu@email.com" />
         <label class="field-label">Contraseña</label>
@@ -326,6 +352,8 @@ async function doRegister() {
     const data = await apiJson('/auth/register', { method: 'POST', body: JSON.stringify(payload) });
     tokenStore.set(data.accessToken, data.refreshToken);
     currentUser = data.user;
+    idleMsg = false;
+    armIdle();
     // El código de recuperación viene UNA sola vez — hay que mostrarlo sí o sí.
     const app = document.getElementById('app');
     app.innerHTML = `
@@ -403,6 +431,8 @@ async function doLogin() {
     const data = await apiJson('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
     tokenStore.set(data.accessToken, data.refreshToken);
     currentUser = data.user;
+    idleMsg = false;
+    armIdle();
     location.hash = '#/dashboard';
     navigate();
   } catch (err) {
@@ -414,6 +444,7 @@ async function logout() {
   try { await apiJson('/auth/logout', { method: 'POST', body: JSON.stringify({ refreshToken: tokenStore.getRefresh() }) }); } catch {}
   tokenStore.clear();
   currentUser = null;
+  clearTimeout(idleTimer);
   location.hash = '';
   renderLogin();
 }
@@ -1171,7 +1202,7 @@ async function init() {
   applyTheme(currentTheme());   // fija el tema al arrancar (además del script inline anti-flash)
   const token = tokenStore.getAccess();
   if (token) {
-    try { currentUser = await apiJson('/auth/me'); } catch { tokenStore.clear(); }
+    try { currentUser = await apiJson('/auth/me'); armIdle(); } catch { tokenStore.clear(); }
   }
   navigate();
   refreshBanner();
