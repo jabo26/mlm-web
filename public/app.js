@@ -166,6 +166,28 @@ document.addEventListener('click', async e => {
     else { try { await navigator.clipboard.writeText(url); toast('Link copiado ✅', 'success'); } catch {} }
   }
 });
+
+// ── PWA: service worker + botón "Instalar app" ──────────────────────────────
+let deferredInstall = null;
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstall = e;
+  document.querySelectorAll('.install-btn').forEach((b) => { b.style.display = ''; });
+});
+async function promptInstall() {
+  if (deferredInstall) {
+    deferredInstall.prompt();
+    await deferredInstall.userChoice;
+    deferredInstall = null;
+    document.querySelectorAll('.install-btn').forEach((b) => { b.style.display = 'none'; });
+  } else {
+    toast('Abrí el menú del navegador y elegí "Agregar a la pantalla de inicio".', 'info', 5000);
+  }
+}
+document.addEventListener('click', (e) => { if (e.target.closest('.install-btn')) promptInstall(); });
 const themeBtn = '<button class="icon-btn theme-toggle" title="Modo oscuro">🌙</button>';
 
 // ── Auto-logout por inactividad ──────────────────────────────────────────────
@@ -1159,6 +1181,12 @@ async function renderMore(content) {
       <div style="font-weight:700; font-size:16px;">${esc(currentUser.fullName)}</div>
       <div style="color:var(--gray300); font-size:13px;">${esc(currentUser.email)}</div>
       <span class="badge purple">Nivel ${currentUser.currentLevel}</span> ${currentUser.role === 'admin' ? '<span class="badge purple">Admin</span>' : ''}
+    </div>
+
+    <div class="card">
+      <div class="section-label">App</div>
+      <button class="btn secondary small install-btn">📲 Instalar Corrientes</button>
+      <p style="font-size:12px; color:var(--gray300); margin:8px 0 0;">Agregala a tu pantalla de inicio para abrirla como una app, en pantalla completa.</p>
     </div>
 
     <div class="card">

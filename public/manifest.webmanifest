@@ -1,0 +1,14 @@
+{
+  "name": "Corrientes",
+  "short_name": "Corrientes",
+  "description": "Corrientes — tu cuenta, listas, pagos y academia.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0F1923",
+  "theme_color": "#00C896",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
