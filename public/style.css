@@ -182,6 +182,11 @@ td { padding: 8px; border-top: 1px solid var(--gray100); }
 .pos-num.leader { background: #FEF3C7; }
 .member-info { flex: 1; }
 .member-alias { font-weight: 700; font-size: 13px; }
+.deadline-chip {
+  display: inline-block; margin-top: 4px; font-size: 11px; font-weight: 700;
+  padding: 2px 8px; border-radius: 20px; background: var(--info-light); color: var(--info);
+}
+.deadline-chip.warn { background: var(--warning-light); color: #D97706; }
 
 .evidence-img { max-width: 100%; border-radius: 10px; margin: 10px 0; background: var(--gray100); }
 
@@ -373,3 +378,26 @@ td { padding: 8px; border-top: 1px solid var(--gray100); }
 }
 .invite-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 .invite-actions .btn { text-decoration: none; }
+
+/* ── Barra de navegación inferior (solo móvil) ───────────────────────────── */
+#bottomnav { display: none; }
+@media (max-width: 768px) {
+  #bottomnav {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 25;
+    background: var(--white); border-top: 1px solid var(--gray100);
+    padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -2px 12px rgba(0,0,0,0.06);
+  }
+  #bottomnav a {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    text-decoration: none; color: var(--gray300); font-size: 10px; font-weight: 700;
+    padding: 4px 0; opacity: 0.65; position: relative;
+  }
+  #bottomnav a.active { opacity: 1; color: var(--primary); }
+  #bottomnav .bn-emoji { font-size: 20px; }
+  #bottomnav .bn-dot {
+    position: absolute; top: 2px; right: calc(50% - 16px);
+    width: 8px; height: 8px; background: var(--error); border-radius: 50%;
+  }
+  #content { padding-bottom: 84px; }   /* espacio para no tapar contenido */
+}

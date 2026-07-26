@@ -289,7 +289,7 @@ async function navigate() {
   }
   renderShell();
   const route = ROUTES.find(r => r.path === currentRoute()) || ROUTES[0];
-  document.querySelectorAll('#sidenav a').forEach(a => a.classList.toggle('active', a.dataset.path === route.path));
+  document.querySelectorAll('#sidenav a, #bottomnav a').forEach(a => a.classList.toggle('active', a.dataset.path === route.path));
   const content = document.getElementById('content');
   content.innerHTML = '<div class="loading">Cargando…</div>';
   try {
@@ -328,6 +328,15 @@ function renderShell() {
       </nav>
       <div id="content"></div>
     </div>
+    <nav id="bottomnav">
+      ${['dashboard', 'mylist', 'payments', 'notifications', 'more'].map(p => {
+        const r = ROUTES.find(x => x.path === p);
+        return `<a href="#/${r.path}" data-path="${r.path}">
+          <span class="bn-emoji">${r.emoji}</span><span class="bn-label">${r.label}</span>
+          ${r.path === 'notifications' ? '<span class="bn-dot" id="bnUnreadDot" style="display:none"></span>' : ''}
+        </a>`;
+      }).join('')}
+    </nav>
   `;
   document.getElementById('logoutBtn').onclick = logout;
   // Drawer móvil
@@ -347,6 +356,8 @@ async function refreshUnreadBadge() {
     unreadCount = count;
     const dot = document.getElementById('navUnreadDot');
     if (dot) { dot.style.display = count > 0 ? 'flex' : 'none'; dot.textContent = count > 9 ? '9+' : count; }
+    const bnDot = document.getElementById('bnUnreadDot');
+    if (bnDot) bnDot.style.display = count > 0 ? 'block' : 'none';
   } catch { /* silencioso */ }
 }
 
@@ -679,6 +690,8 @@ async function renderMyList(content) {
           <div class="member-info">
             <span class="member-alias">${esc(m.alias)}</span> ${m.isCurrentUser ? '<span class="badge green">TÚ</span>' : ''}
             <div style="font-size:11px; color:var(--gray300);">${m.invitationStatus === 'cumplió' ? '✓ Invitación cumplida' : m.invitationStatus === 'penalizado' ? '✗ Penalizado' : '○ Invitación pendiente'}</div>
+            ${m.isCurrentUser && m.paymentStatus !== 'confirmed' && m.daysRemainingPayment != null ? `<div class="deadline-chip warn">⏳ ${fmtDays(m.daysRemainingPayment)} para pagar</div>` : ''}
+            ${m.isCurrentUser && m.invitationStatus === 'pending' && m.daysRemainingInvitation != null ? `<div class="deadline-chip">👥 ${fmtDays(m.daysRemainingInvitation)} para invitar</div>` : ''}
           </div>
           <span class="badge ${PAYMENT_BADGE[m.paymentStatus]?.[1] ?? 'gray'}">${PAYMENT_BADGE[m.paymentStatus]?.[0] ?? m.paymentStatus}</span>
         `}
@@ -1109,7 +1122,7 @@ async function renderInvitations(content) {
     ` : ''}
     <div class="card">
       <div class="section-label">Historial de invitados (${mine.length})</div>
-      ${mine.length === 0 ? '<div class="empty">Aún no invitaste a nadie</div>' : `
+      ${mine.length === 0 ? `<div class="empty"><span class="emoji">🔗</span><p>Aún no invitaste a nadie</p><button class="btn small" data-share="${esc(link.link)}">↗ Compartir mi link</button></div>` : `
         <table>
           <thead><tr><th>Alias</th><th>Estado</th><th>Nivel</th><th>Registrado</th></tr></thead>
           <tbody>${mine.map(i => `<tr><td>${esc(i.invitedAlias)}</td><td>${esc(i.status)}</td><td>N${i.level}</td><td>${fmtDate(i.registeredAt)}</td></tr>`).join('')}</tbody>
