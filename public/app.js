@@ -151,6 +151,21 @@ function applyTheme(t) {
 function toggleTheme() { applyTheme(currentTheme() === 'dark' ? 'light' : 'dark'); }
 // Un solo listener (delegación) para cualquier botón .theme-toggle de la app.
 document.addEventListener('click', e => { if (e.target.closest('.theme-toggle')) toggleTheme(); });
+// Copiar / compartir (delegación) — sirve para cualquier [data-copy] / [data-share].
+document.addEventListener('click', async e => {
+  const c = e.target.closest('[data-copy]');
+  if (c) {
+    try { await navigator.clipboard.writeText(c.dataset.copy); toast('Copiado ✅', 'success'); }
+    catch { toast('No se pudo copiar', 'error'); }
+    return;
+  }
+  const s = e.target.closest('[data-share]');
+  if (s) {
+    const url = s.dataset.share;
+    if (navigator.share) { try { await navigator.share({ title: 'Corrientes', text: 'Te invito a Corrientes 🚀', url }); } catch {} }
+    else { try { await navigator.clipboard.writeText(url); toast('Link copiado ✅', 'success'); } catch {} }
+  }
+});
 const themeBtn = '<button class="icon-btn theme-toggle" title="Modo oscuro">🌙</button>';
 
 // ── Auto-logout por inactividad ──────────────────────────────────────────────
@@ -1046,9 +1061,17 @@ async function renderInvitations(content) {
     <h1 class="page-title">Mis Invitaciones</h1>
     <div class="card">
       <div class="section-label">Tu código de invitación</div>
-      <div class="link-row">
-        <input readonly value="${esc(link.referralCode)}" />
-        <input readonly value="${esc(link.link)}" />
+      <div class="invite-code">
+        <span class="invite-code-val">${esc(link.referralCode)}</span>
+        <button class="btn small secondary" data-copy="${esc(link.referralCode)}">📋 Copiar</button>
+      </div>
+      <label class="field-label" style="margin-top:14px;">Link de invitación</label>
+      <div class="link-row"><input readonly value="${esc(link.link)}" /></div>
+      <div class="invite-actions">
+        <button class="btn small" data-copy="${esc(link.link)}">📋 Copiar link</button>
+        <button class="btn small secondary" data-share="${esc(link.link)}">↗ Compartir</button>
+        <a class="btn small ghost" target="_blank" rel="noopener"
+           href="https://wa.me/?text=${encodeURIComponent('Te invito a Corrientes 🚀 Registrate con mi link: ' + link.link)}">💬 WhatsApp</a>
       </div>
     </div>
     <div class="stats-grid" style="grid-template-columns:repeat(3,1fr);">

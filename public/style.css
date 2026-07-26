@@ -360,3 +360,16 @@ td { padding: 8px; border-top: 1px solid var(--gray100); }
 }
 .btn.secondary .spin, .btn.ghost .spin { border-color: rgba(0,200,150,0.4); border-top-color: var(--primary); }
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Invitaciones ────────────────────────────────────────────────────────── */
+.invite-code {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--primary-light); border-radius: 12px; padding: 12px 16px;
+}
+.invite-code-val {
+  font-family: ui-monospace, "SF Mono", Consolas, monospace;
+  font-size: 20px; font-weight: 800; letter-spacing: 2px; color: var(--primary-dark);
+  flex: 1; min-width: 120px; word-break: break-all;
+}
+.invite-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.invite-actions .btn { text-decoration: none; }
