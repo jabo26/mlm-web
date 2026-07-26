@@ -179,6 +179,54 @@ async function idleLogout() {
 ['click', 'keydown', 'mousemove', 'scroll', 'touchstart'].forEach(ev =>
   document.addEventListener(ev, onActivity, { passive: true }));
 
+// ── Toasts (avisos no bloqueantes) ──────────────────────────────────────────
+function toast(msg, type = 'info', ms = 3400) {
+  let cont = document.getElementById('toast-container');
+  if (!cont) { cont = document.createElement('div'); cont.id = 'toast-container'; document.body.appendChild(cont); }
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.innerHTML = `<span>${type === 'success' ? '✅' : type === 'error' ? '⛔' : 'ℹ️'}</span><span>${esc(msg)}</span>`;
+  cont.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 250); }, ms);
+}
+
+// ── Modal genérico → confirmar (true/false) o pedir texto (string|null) ──────
+function modal({ title, message = '', confirmText = 'Aceptar', cancelText = 'Cancelar', danger = false, input = null }) {
+  return new Promise(resolve => {
+    const ov = document.createElement('div');
+    ov.className = 'modal-overlay';
+    ov.innerHTML = `
+      <div class="modal-box">
+        <div class="modal-title">${esc(title)}</div>
+        ${message ? `<div class="modal-msg">${esc(message)}</div>` : ''}
+        ${input ? `<textarea class="modal-input" rows="2" placeholder="${esc(input.placeholder || '')}"></textarea>` : ''}
+        <div class="modal-actions">
+          <button class="btn ghost small modal-cancel">${esc(cancelText)}</button>
+          <button class="btn small modal-ok ${danger ? 'danger' : ''}">${esc(confirmText)}</button>
+        </div>
+      </div>`;
+    document.body.appendChild(ov);
+    const inp = ov.querySelector('.modal-input');
+    if (inp) setTimeout(() => inp.focus(), 30);
+    const close = (val) => { ov.remove(); resolve(val); };
+    ov.querySelector('.modal-cancel').onclick = () => close(input ? null : false);
+    ov.querySelector('.modal-ok').onclick = () => close(input ? (inp.value.trim() || null) : true);
+    ov.addEventListener('click', e => { if (e.target === ov) close(input ? null : false); });
+  });
+}
+const confirmModal = (o) => modal(o);
+const promptModal = (o) => modal({ ...o, input: { placeholder: o.placeholder } });
+
+// Ejecuta una acción async mostrando el botón en estado "cargando".
+async function withLoading(btn, fn) {
+  if (!btn) return fn();
+  const orig = btn.innerHTML; btn.disabled = true; btn.dataset.loading = '1';
+  btn.innerHTML = '<span class="spin"></span>';
+  try { return await fn(); }
+  finally { btn.disabled = false; delete btn.dataset.loading; btn.innerHTML = orig; }
+}
+
 // ── Router ────────────────────────────────────────────────────────────────
 const ROUTES = [
   { path: 'dashboard',    label: 'Inicio',         emoji: '🏠', render: renderDashboard },
@@ -502,7 +550,7 @@ async function renderMyList(content) {
       </div>`;
     document.getElementById('joinBtn').onclick = async () => {
       try { await apiJson('/lists/join', { method: 'POST', body: JSON.stringify({ level: 1 }) }); navigate(); }
-      catch (err) { alert(err.message); }
+      catch (err) { toast(err.message, 'error'); }
     };
     return;
   }
@@ -672,9 +720,12 @@ async function renderMyList(content) {
     };
   }
   if (isLeader && myList.status === 'active' && allPaid) {
-    document.getElementById('completeBtn').onclick = async () => {
-      try { await apiJson(`/lists/${myList.id}/complete`, { method: 'POST' }); navigate(); }
-      catch (err) { alert(err.message); }
+    document.getElementById('completeBtn').onclick = async (e) => {
+      if (!(await confirmModal({ title: 'Completar lista', message: 'Se cierra la lista, cobrás tus ganancias y se dispara el reordenamiento + tu ascenso. ¿Confirmás?', confirmText: 'Completar' }))) return;
+      await withLoading(e.currentTarget, async () => {
+        try { await apiJson(`/lists/${myList.id}/complete`, { method: 'POST' }); toast('¡Lista completada! 🎉', 'success'); navigate(); }
+        catch (err) { toast(err.message, 'error'); }
+      });
     };
   }
   document.querySelectorAll('.mylist-dispute-evidence-link').forEach(link => {
@@ -738,14 +789,15 @@ async function uploadEvidence(listId) {
 }
 
 window.confirmTx = async (id) => {
-  try { await apiJson(`/transactions/${id}/confirm`, { method: 'POST', body: JSON.stringify({}) }); navigate(); }
-  catch (err) { alert(err.message); }
+  if (!(await confirmModal({ title: 'Confirmar pago', message: '¿Confirmás que recibiste este pago? Se le desbloquea el curso al pagador.', confirmText: 'Confirmar pago' }))) return;
+  try { await apiJson(`/transactions/${id}/confirm`, { method: 'POST', body: JSON.stringify({}) }); toast('Pago confirmado', 'success'); navigate(); }
+  catch (err) { toast(err.message, 'error'); }
 };
 window.rejectTx = async (id) => {
-  const reason = prompt('Motivo del rechazo:');
+  const reason = await promptModal({ title: 'Rechazar pago', message: 'Ingresá el motivo del rechazo (lo verá el pagador).', placeholder: 'Ej: el comprobante no coincide con el monto', confirmText: 'Rechazar', danger: true });
   if (!reason) return;
-  try { await apiJson(`/transactions/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }); navigate(); }
-  catch (err) { alert(err.message); }
+  try { await apiJson(`/transactions/${id}/reject`, { method: 'POST', body: JSON.stringify({ reason }) }); toast('Pago rechazado', 'info'); navigate(); }
+  catch (err) { toast(err.message, 'error'); }
 };
 
 // ── Chat (coordinación de pagos + disputa) ─────────────────────────────────
@@ -811,7 +863,7 @@ function openConversationModal({ title, subtitle, fetchThread, sendMessage }) {
     if (!body) return;
     sendBtn.disabled = true;
     try { await sendMessage(body); input.value = ''; await load(); msgsEl.scrollTop = msgsEl.scrollHeight; }
-    catch (err) { alert(err.message || 'No se pudo enviar'); }
+    catch (err) { toast(err.message || 'No se pudo enviar', 'error'); }
     finally { sendBtn.disabled = false; }
   };
   sendBtn.onclick = doSend;
@@ -830,7 +882,7 @@ function openConversationModal({ title, subtitle, fetchThread, sendMessage }) {
 async function openChatDm({ listId, otherUserId, title }) {
   if (!otherUserId) {
     try { const convs = await chatApi.getConversations(listId); otherUserId = convs[0]?.otherUserId; } catch {}
-    if (!otherUserId) { alert('No se pudo abrir el chat con el líder.'); return; }
+    if (!otherUserId) { toast('No se pudo abrir el chat con el líder.', 'error'); return; }
   }
   openConversationModal({
     title: title || 'Chat con el líder',
@@ -982,7 +1034,7 @@ async function renderAcademy(content) {
 }
 window.bumpProgress = async (id, pct) => {
   try { await apiJson(`/courses/${id}/progress`, { method: 'POST', body: JSON.stringify({ percentage: pct }) }); navigate(); }
-  catch (err) { alert(err.message); }
+  catch (err) { toast(err.message, 'error'); }
 };
 
 // ── Invitaciones ──────────────────────────────────────────────────────────
