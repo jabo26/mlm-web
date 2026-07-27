@@ -555,6 +555,12 @@ async function renderDashboard(content) {
   const me = members.find(m => m.isCurrentUser);
   const isLeader = me?.position === 1;
 
+  // Sin lista → puede estar en la cola de espera de ingreso.
+  let queue = null;
+  if (!myList) { try { queue = await apiJson('/lists/my/join-queue'); } catch {} }
+  const posLabel = me ? 'Pos. ' + me.position : (queue?.inQueue ? 'Fila #' + queue.queuePosition : 'Sin lista');
+  const posSub   = isLeader ? 'Eres el líder ⭐' : (queue?.inQueue ? 'Esperando cupo ⏳' : 'Tu posición');
+
   content.innerHTML = `
     <h1 class="page-title">Hola, ${esc(currentUser.fullName.split(' ')[0])} 👋</h1>
     <p class="page-sub">Nivel ${currentUser.currentLevel} · ${currentUser.recycleTickets} tickets</p>
@@ -562,7 +568,7 @@ async function renderDashboard(content) {
     <div class="stats-grid">
       <div class="card stat-card"><div class="stat-emoji">💰</div><div class="stat-value">${fmtUSD(currentUser.totalEarnedUsd)}</div><div class="stat-label">Ganancias</div></div>
       <div class="card stat-card"><div class="stat-emoji">🏆</div><div class="stat-value">Nivel ${currentUser.currentLevel}</div><div class="stat-label">$${LEVEL_AMOUNTS[currentUser.currentLevel] ?? '—'} por pago</div></div>
-      <div class="card stat-card"><div class="stat-emoji">📍</div><div class="stat-value">${me ? 'Pos. ' + me.position : 'Sin lista'}</div><div class="stat-label">${isLeader ? 'Eres el líder ⭐' : 'Tu posición'}</div></div>
+      <div class="card stat-card"><div class="stat-emoji">📍</div><div class="stat-value">${posLabel}</div><div class="stat-label">${posSub}</div></div>
       <div class="card stat-card"><div class="stat-emoji">🎟️</div><div class="stat-value">${currentUser.recycleTickets}</div><div class="stat-label">Tickets</div></div>
     </div>
 
@@ -571,7 +577,9 @@ async function renderDashboard(content) {
         <strong>Mi Lista Actual</strong>
         <a href="#/mylist" class="btn small secondary">Ver todo →</a>
       </div>
-      ${members.length === 0 ? `<div class="empty">Sin lista activa</div>` : members.map(m => `
+      ${members.length === 0 ? (queue?.inQueue
+          ? `<div class="empty">⏳ En la fila de espera <strong>#${queue.queuePosition}</strong> (nivel ${queue.level}) — te asignamos lugar apenas se abra un cupo.</div>`
+          : `<div class="empty">Sin lista activa</div>`) : members.map(m => `
         <div class="member-row ${m.isCurrentUser ? 'me' : ''}">
           <div class="pos-num ${m.position === 1 ? 'leader' : ''}">${m.position === 1 ? '★' : m.position}</div>
           ${m.isEmpty ? `<span style="color:var(--gray200); font-style:italic;">Vacío</span>` :
@@ -589,6 +597,24 @@ async function renderMyList(content) {
   try { myList = await apiJson('/lists/my'); } catch {}
 
   if (!myList) {
+    // ¿Ya está esperando cupo en la cola de ingreso?
+    let queue = null;
+    try { queue = await apiJson('/lists/my/join-queue'); } catch {}
+
+    if (queue && queue.inQueue) {
+      content.innerHTML = `
+        <h1 class="page-title">Mi Lista</h1>
+        <div class="card empty">
+          <span class="emoji">⏳</span>
+          <p><strong>Estás en la fila de espera</strong></p>
+          <p style="font-size:2rem; margin:6px 0; color:var(--green);">#${queue.queuePosition}</p>
+          <p class="page-sub" style="margin:0;">Todas las listas de nivel ${queue.level} están completas.
+          Apenas se abra un lugar te asignamos una posición automáticamente y recién ahí arranca tu plazo de pago.
+          No tenés que hacer nada más.</p>
+        </div>`;
+      return;
+    }
+
     content.innerHTML = `
       <h1 class="page-title">Mi Lista</h1>
       <div class="card empty">
@@ -597,7 +623,11 @@ async function renderMyList(content) {
         <button class="btn" id="joinBtn">🔄 Unirme a una lista de nivel 1</button>
       </div>`;
     document.getElementById('joinBtn').onclick = async () => {
-      try { await apiJson('/lists/join', { method: 'POST', body: JSON.stringify({ level: 1 }) }); navigate(); }
+      try {
+        const res = await apiJson('/lists/join', { method: 'POST', body: JSON.stringify({ level: 1 }) });
+        if (res && res.queued) toast(res.message || `Quedaste en la fila de espera (#${res.queuePosition}).`, 'info');
+        navigate();
+      }
       catch (err) { toast(err.message, 'error'); }
     };
     return;
