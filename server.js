@@ -18,6 +18,13 @@ const PORT = 4200;
 const HOST = '127.0.0.1'; // loopback únicamente — NO cambiar a 0.0.0.0
 const ROOT = path.join(__dirname, 'public');
 
+// Backend local (listener plano de loopback, LOCAL_PORT del .env del backend).
+// Las llamadas a /api se reenvían acá server-side: así este server estático se
+// comporta igual que cuando el backend sirve la SPA en su propio "/", y el
+// navegador ve todo desde el mismo origen (sin problemas de CORS).
+const API_HOST = process.env.API_HOST || '127.0.0.1';
+const API_PORT = Number(process.env.API_PORT || 4082);
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js':   'application/javascript; charset=utf-8',
@@ -27,6 +34,26 @@ const MIME = {
 };
 
 const server = http.createServer((req, res) => {
+  // Proxy de la API al backend local. Debe ir ANTES del fallback SPA: si no,
+  // /api/... caía en el fallback y devolvía index.html con 200, y el cliente
+  // parseaba null → "Cannot read properties of null (reading 'accessToken')".
+  if (req.url.startsWith('/api/') || req.url === '/api') {
+    const proxyReq = http.request(
+      { host: API_HOST, port: API_PORT, method: req.method, path: req.url,
+        headers: { ...req.headers, host: `${API_HOST}:${API_PORT}` } },
+      (proxyRes) => {
+        res.writeHead(proxyRes.statusCode, proxyRes.headers);
+        proxyRes.pipe(res);
+      },
+    );
+    proxyReq.on('error', (e) => {
+      res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ message: `Backend no disponible en ${API_HOST}:${API_PORT} (${e.code || e.message})` }));
+    });
+    req.pipe(proxyReq);
+    return;
+  }
+
   let reqPath = decodeURIComponent(req.url.split('?')[0]);
   if (reqPath === '/') reqPath = '/index.html';
 
